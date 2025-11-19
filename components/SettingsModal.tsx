@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Server, User, Lock, Globe } from 'lucide-react';
+import { X, Server, User, Lock, Globe, Mic2 } from 'lucide-react';
 import { SubsonicCredentials } from '../types';
 
 interface SettingsModalProps {
@@ -13,12 +13,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, credenti
   const [url, setUrl] = useState(credentials.url);
   const [username, setUsername] = useState(credentials.username);
   const [password, setPassword] = useState(credentials.password || '');
+  const [enableLrcLib, setEnableLrcLib] = useState(credentials.enableLrcLib || false);
   
   useEffect(() => {
     if (isOpen) {
       setUrl(credentials.url);
       setUsername(credentials.username);
       setPassword(credentials.password || '');
+      setEnableLrcLib(credentials.enableLrcLib || false);
     }
   }, [isOpen, credentials]);
 
@@ -29,7 +31,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, credenti
         alert("Server URL and Username are required.");
         return;
     }
-    onSave({ url, username, password });
+    onSave({ url, username, password, enableLrcLib });
     onClose();
   };
 
@@ -87,6 +89,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, credenti
                   className="w-full bg-black/30 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white focus:outline-none focus:border-subsonic-primary focus:ring-1 focus:ring-subsonic-primary transition-all"
                 />
               </div>
+            </div>
+
+            <div className="pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                         <Mic2 className="text-subsonic-secondary" size={18} />
+                         <div>
+                             <p className="text-sm font-semibold text-white">Enable External Lyrics</p>
+                             <p className="text-xs text-gray-500">Fetch from LrcLib.net if missing on server</p>
+                         </div>
+                    </div>
+                    <button 
+                        onClick={() => setEnableLrcLib(!enableLrcLib)}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors ${enableLrcLib ? 'bg-subsonic-primary' : 'bg-white/10'}`}
+                    >
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${enableLrcLib ? 'translate-x-6' : 'translate-x-0'}`} />
+                    </button>
+                </div>
             </div>
 
           <button

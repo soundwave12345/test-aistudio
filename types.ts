@@ -1,7 +1,9 @@
+
 export interface SubsonicCredentials {
   url: string;
   username: string;
   password?: string; 
+  enableLrcLib?: boolean; // Toggle for external lyrics
 }
 
 export interface Song {
@@ -31,6 +33,12 @@ export interface Playlist {
   songCount: number;
   coverArt: string;
   songs?: Song[]; // For details view
+}
+
+export interface Lyrics {
+  artist?: string;
+  title?: string;
+  content: string; // Can be plain text or LRC format
 }
 
 export enum ViewState {

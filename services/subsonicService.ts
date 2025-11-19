@@ -1,4 +1,4 @@
-import { Album, Playlist, Song, SubsonicCredentials } from "../types";
+import { Album, Playlist, Song, SubsonicCredentials, Lyrics } from "../types";
 
 const APP_NAME = 'GeminiStream';
 
@@ -118,7 +118,6 @@ export const getPlaylists = async (creds: SubsonicCredentials): Promise<Playlist
   try {
     const baseUrl = creds.url.replace(/\/$/, '');
     const params = getAuthParams(creds);
-    // Fetching all playlists (default limit usually allows this, explicitly setting null implies server default, but better to set large)
     const url = `${baseUrl}/rest/getPlaylists?${params}`;
 
     const data = await fetchWithLogging(url, 'getPlaylists');
@@ -207,3 +206,64 @@ export const getPlaylistDetails = async (creds: SubsonicCredentials, playlistId:
         return null;
     }
 }
+
+/**
+ * Tries to fetch lyrics from Subsonic, falls back to LrcLib if enabled
+ */
+export const getLyrics = async (creds: SubsonicCredentials, song: Song): Promise<Lyrics | null> => {
+    // 1. Try Subsonic Server First
+    try {
+        const baseUrl = creds.url.replace(/\/$/, '');
+        const params = getAuthParams(creds);
+        const url = `${baseUrl}/rest/getLyrics?id=${song.id}&${params}`;
+
+        const data = await fetchWithLogging(url, 'getLyrics');
+        const lyricsData = data['subsonic-response']?.lyrics;
+
+        if (lyricsData && lyricsData.value) {
+            return {
+                artist: lyricsData.artist,
+                title: lyricsData.title,
+                content: lyricsData.value 
+            };
+        }
+    } catch (error) {
+        // Ignore errors from Subsonic lyrics fetch and proceed to fallback
+        console.log("[Subsonic] No lyrics found on server.");
+    }
+
+    // 2. Fallback to LrcLib if enabled
+    if (creds.enableLrcLib) {
+        console.log("[LrcLib] Attempting fallback fetch...");
+        try {
+            const artist = encodeURIComponent(song.artist);
+            const track = encodeURIComponent(song.title);
+            const album = encodeURIComponent(song.album);
+            const duration = Math.round(song.duration);
+
+            // Use LrcLib "get" endpoint which is precise
+            const lrcUrl = `https://lrclib.net/api/get?artist_name=${artist}&track_name=${track}&album_name=${album}&duration=${duration}`;
+            
+            const response = await fetch(lrcUrl);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.syncedLyrics || data.plainLyrics) {
+                    console.log("[LrcLib] Lyrics found!");
+                    return {
+                        artist: data.artistName,
+                        title: data.trackName,
+                        content: data.syncedLyrics || data.plainLyrics
+                    };
+                }
+            } else {
+                // If strict get fails, maybe try search (omitted to prevent bad matches for now)
+                 console.log("[LrcLib] No match found.");
+            }
+
+        } catch (e) {
+            console.error("[LrcLib] Error fetching lyrics:", e);
+        }
+    }
+
+    return null;
+};

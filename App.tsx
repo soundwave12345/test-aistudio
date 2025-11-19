@@ -314,6 +314,7 @@ const App: React.FC = () => {
                   coverArt={selectedAlbum.coverArt}
                   songs={selectedAlbum.songs || []}
                   onPlaySong={(song) => handlePlaySong(song, selectedAlbum.songs)}
+                  showCovers={false} // Album covers are redundant in album details
               />
           );
 
@@ -326,6 +327,7 @@ const App: React.FC = () => {
                   coverArt={selectedPlaylist.coverArt}
                   songs={selectedPlaylist.songs || []}
                   onPlaySong={(song) => handlePlaySong(song, selectedPlaylist.songs)}
+                  showCovers={true} // Show covers for playlists
               />
           );
 

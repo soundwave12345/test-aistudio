@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Shuffle, Repeat, Cast } from 'lucide-react';
-import { Song, SubsonicCredentials } from '../types';
-import { getStreamUrl } from '../services/subsonicService';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Shuffle, Repeat, Cast, Mic2, Music2 } from 'lucide-react';
+import { Song, SubsonicCredentials, Lyrics } from '../types';
+import { getStreamUrl, getLyrics } from '../services/subsonicService';
 
 interface PlayerProps {
   currentSong: Song | null;
@@ -30,6 +30,58 @@ const Player: React.FC<PlayerProps> = ({
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   
+  // Lyrics State
+  const [showLyrics, setShowLyrics] = useState(false);
+  const [lyrics, setLyrics] = useState<Lyrics | null>(null);
+  const [parsedLyrics, setParsedLyrics] = useState<{time: number, text: string}[]>([]);
+
+  // --- DATA FETCHING ---
+  useEffect(() => {
+      if (currentSong) {
+          setLyrics(null);
+          setParsedLyrics([]);
+          // Changed: Pass the full currentSong object, not just ID
+          getLyrics(credentials, currentSong).then(l => {
+              if (l) {
+                  setLyrics(l);
+                  parseLyrics(l.content);
+              }
+          });
+      }
+  }, [currentSong, credentials]);
+
+  const parseLyrics = (content: string) => {
+      const lines = content.split('\n');
+      const parsed = [];
+      // Regex for [mm:ss.xx]
+      const timeReg = /\[(\d{2}):(\d{2})(\.\d{2,3})?\]/;
+      
+      let hasTimestamps = false;
+
+      for (const line of lines) {
+          const match = line.match(timeReg);
+          if (match) {
+              hasTimestamps = true;
+              const min = parseInt(match[1]);
+              const sec = parseInt(match[2]);
+              const ms = match[3] ? parseFloat(match[3]) : 0;
+              const time = min * 60 + sec + ms;
+              const text = line.replace(timeReg, '').trim();
+              if (text) parsed.push({ time, text });
+          } else if (line.trim()) {
+              // If mixed or no timestamps, just push with 0 or handle as plain text
+              parsed.push({ time: -1, text: line.trim() });
+          }
+      }
+
+      if (!hasTimestamps) {
+          // Plain text lyrics
+           setParsedLyrics(lines.map(l => ({ time: -1, text: l })));
+      } else {
+           setParsedLyrics(parsed);
+      }
+  };
+
   // --- AUDIO LOGIC ---
   // Handle Audio Source
   useEffect(() => {
@@ -52,6 +104,26 @@ const Player: React.FC<PlayerProps> = ({
         audioRef.current.pause();
     }
   }, [isPlaying]);
+
+  // Android Auto / Media Session API Integration
+  useEffect(() => {
+    if ('mediaSession' in navigator && currentSong) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: currentSong.title,
+            artist: currentSong.artist,
+            album: currentSong.album,
+            artwork: [
+                { src: currentSong.coverArt, sizes: '512x512', type: 'image/jpeg' }
+            ]
+        });
+
+        navigator.mediaSession.setActionHandler('play', onPlayPause);
+        navigator.mediaSession.setActionHandler('pause', onPlayPause);
+        navigator.mediaSession.setActionHandler('previoustrack', onPrev);
+        navigator.mediaSession.setActionHandler('nexttrack', onNext);
+    }
+  }, [currentSong, onPlayPause, onPrev, onNext]);
+
 
   // Time Update Loop
   const handleTimeUpdate = () => {
@@ -84,25 +156,57 @@ const Player: React.FC<PlayerProps> = ({
   // --- CHROMECAST ---
   const handleCast = () => {
     if (window.cast && window.cast.framework) {
-      window.cast.framework.CastContext.getInstance().requestSession();
+        try {
+            window.cast.framework.CastContext.getInstance().requestSession();
+        } catch (e) {
+             console.error("Cast Error:", e);
+             alert("Could not start casting. If you are using a local server (HTTP), Chromecast requires a secure context (HTTPS) or localhost.");
+        }
     } else {
-      alert("Chromecast not available. Ensure you are using Chrome or a supported browser on a secure connection.");
+      alert("Chromecast not available.");
     }
   };
 
   // --- UI RENDERING ---
 
+  // Helper to get active lyric line
+  const getActiveLyricIndex = () => {
+      if (parsedLyrics.length === 0 || parsedLyrics[0].time === -1) return -1;
+      for (let i = parsedLyrics.length - 1; i >= 0; i--) {
+          if (currentTime >= parsedLyrics[i].time) return i;
+      }
+      return -1;
+  };
+
+  const activeLyricIndex = getActiveLyricIndex();
+
+  // Auto scroll lyrics
+  const lyricsContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+      if (showLyrics && activeLyricIndex !== -1 && lyricsContainerRef.current) {
+          const el = lyricsContainerRef.current.children[activeLyricIndex] as HTMLElement;
+          if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+      }
+  }, [activeLyricIndex, showLyrics]);
+
   return (
     <>
       {/* 1. Full Screen Player UI - Z-Index increased to 60 to cover bottom nav (z-50) */}
       {currentSong && isExpanded && (
-        <div className="fixed inset-0 z-[60] bg-subsonic-bg flex flex-col animate-in slide-in-from-bottom duration-300">
-            {/* Background Blur */}
+        <div className="fixed inset-0 z-[60] bg-black flex flex-col animate-in slide-in-from-bottom duration-300">
+            {/* Super Blurred Chromatic Background */}
             <div 
-              className="absolute inset-0 z-0 opacity-30 blur-3xl scale-125 transition-all duration-1000" 
-              style={{ backgroundImage: `url(${currentSong.coverArt})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+              className="absolute inset-0 z-0 opacity-60 blur-3xl scale-150 pointer-events-none" 
+              style={{ 
+                  backgroundImage: `url(${currentSong.coverArt})`, 
+                  backgroundSize: 'cover', 
+                  backgroundPosition: 'center',
+                  filter: 'saturate(200%) blur(80px)'
+              }}
             />
-            <div className="absolute inset-0 z-0 bg-black/50" />
+            <div className="absolute inset-0 z-0 bg-black/40" />
 
             {/* Header */}
             <div className="relative z-10 flex items-center justify-between px-6 py-8 md:py-6">
@@ -116,23 +220,55 @@ const Player: React.FC<PlayerProps> = ({
               </button>
             </div>
 
-            {/* Album Art */}
-            <div className="relative z-10 flex-1 flex items-center justify-center p-8 min-h-0">
-              <div className="w-full max-w-xs md:max-w-md aspect-square rounded-2xl overflow-hidden shadow-2xl border border-white/10 ring-1 ring-white/5">
-                <img 
-                  src={currentSong.coverArt} 
-                  alt="Cover" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
+            {/* Main Content: Toggle between Art and Lyrics */}
+            <div className="relative z-10 flex-1 flex items-center justify-center p-6 min-h-0 overflow-hidden">
+               {showLyrics && lyrics ? (
+                   <div ref={lyricsContainerRef} className="w-full h-full overflow-y-auto hide-scrollbar text-center px-4 py-10 space-y-6 mask-image-gradient">
+                        {parsedLyrics.map((line, i) => (
+                            <p 
+                                key={i} 
+                                className={`text-xl md:text-2xl font-bold transition-all duration-300 ${
+                                    parsedLyrics[0].time !== -1 
+                                        ? (i === activeLyricIndex ? 'text-white scale-110' : 'text-white/30')
+                                        : 'text-white/80'
+                                }`}
+                            >
+                                {line.text}
+                            </p>
+                        ))}
+                        <div className="h-20" /> {/* Spacer */}
+                   </div>
+               ) : (
+                    <div className="w-full max-w-xs md:max-w-md aspect-square rounded-2xl overflow-hidden shadow-2xl border border-white/10 ring-1 ring-white/5 transition-transform duration-500">
+                        <img 
+                        src={currentSong.coverArt} 
+                        alt="Cover" 
+                        className="w-full h-full object-cover"
+                        />
+                    </div>
+               )}
             </div>
 
             {/* Info & Controls */}
-            <div className="relative z-10 pb-12 px-8 w-full max-w-2xl mx-auto">
-              <div className="mb-8 text-center md:text-left">
-                <h2 className="text-2xl md:text-3xl font-bold text-white truncate">{currentSong.title}</h2>
-                <p className="text-lg text-subsonic-secondary truncate mt-2">{currentSong.artist}</p>
-                <p className="text-sm text-white/50 truncate">{currentSong.album}</p>
+            <div className="relative z-10 pb-12 px-8 w-full max-w-2xl mx-auto bg-gradient-to-t from-black/80 to-transparent pt-10">
+              <div className="flex justify-between items-end mb-6">
+                  <div className="text-left min-w-0 flex-1 pr-4">
+                    <h2 className="text-2xl md:text-3xl font-bold text-white truncate">{currentSong.title}</h2>
+                    <p className="text-lg text-subsonic-secondary truncate mt-1">{currentSong.artist}</p>
+                    <p className="text-sm text-white/50 truncate">{currentSong.album}</p>
+                  </div>
+                  {/* Lyrics Toggle Button */}
+                  <button 
+                    onClick={() => setShowLyrics(!showLyrics)}
+                    disabled={!lyrics}
+                    className={`p-3 rounded-full transition-all ${
+                        showLyrics 
+                            ? 'bg-white text-black' 
+                            : (lyrics ? 'text-white hover:bg-white/10' : 'text-white/20 cursor-not-allowed')
+                    }`}
+                  >
+                      <Mic2 size={24} fill={showLyrics ? "currentColor" : "none"} />
+                  </button>
               </div>
 
               {/* Progress */}
