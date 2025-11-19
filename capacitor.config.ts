@@ -5,7 +5,9 @@ const config: CapacitorConfig = {
   appName: 'Subsonic Gemini Streamer',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'http',
+    cleartext: true,
+    allowNavigation: ['*']
   }
 };
 

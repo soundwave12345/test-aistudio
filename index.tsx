@@ -2,6 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import VConsole from 'vconsole';
+
+// Initialize vConsole for on-device debugging
+const vConsole = new VConsole();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

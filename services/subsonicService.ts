@@ -28,8 +28,17 @@ const fetchWithLogging = async (url: string, endpoint: string) => {
       console.error(`[Subsonic] [${endpoint}] Failed to parse JSON. Response was:`, text);
       throw new Error('Invalid JSON response from server');
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[Subsonic] [${endpoint}] NETWORK ERROR:`, error);
+    
+    if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+       if (url.startsWith('http:') && window.location.protocol === 'https:') {
+           console.error("!!! MIXED CONTENT ERROR !!!");
+           console.error("You are trying to access an HTTP server from an HTTPS app.");
+           console.error("Solution: Ensure capacitor.config.ts has 'androidScheme': 'http'.");
+       }
+    }
+    
     throw error;
   }
 };
