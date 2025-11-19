@@ -42,9 +42,10 @@ export enum ViewState {
   PLAYLIST_DETAILS = 'PLAYLIST_DETAILS'
 }
 
-export type SubsonicContextType = {
-  credentials: SubsonicCredentials;
-  updateCredentials: (creds: SubsonicCredentials) => void;
-  isDemoMode: boolean;
-  setDemoMode: (isDemo: boolean) => void;
-};
+// Cast API Types
+declare global {
+  interface Window {
+    cast: any;
+    __onGCastApiAvailable: (isAvailable: boolean) => void;
+  }
+}

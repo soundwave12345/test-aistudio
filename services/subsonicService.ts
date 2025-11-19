@@ -1,7 +1,6 @@
 import { Album, Playlist, Song, SubsonicCredentials } from "../types";
 
 const APP_NAME = 'GeminiStream';
-const CLIENT_VERSION = '1.0.0';
 
 /**
  * Internal helper to log and fetch
@@ -33,7 +32,6 @@ const fetchWithLogging = async (url: string, endpoint: string) => {
        if (url.startsWith('http:') && window.location.protocol === 'https:') {
            console.error("!!! MIXED CONTENT ERROR !!!");
            console.error("You are trying to access an HTTP server from an HTTPS app.");
-           console.error("Solution: Ensure capacitor.config.ts has 'androidScheme': 'http'.");
        }
     }
     
@@ -55,7 +53,7 @@ const getAuthParams = (creds: SubsonicCredentials) => {
 };
 
 export const getCoverArtUrl = (creds: SubsonicCredentials, id: string | undefined, size: number = 300): string => {
-  if (!id) return 'https://picsum.photos/300/300';
+  if (!id) return 'https://via.placeholder.com/300x300?text=No+Cover';
   const baseUrl = creds.url.replace(/\/$/, '');
   const params = getAuthParams(creds);
   return `${baseUrl}/rest/getCoverArt?id=${id}&size=${size}&${params}`;
@@ -65,15 +63,14 @@ export const getStreamUrl = (creds: SubsonicCredentials, id: string): string => 
   const baseUrl = creds.url.replace(/\/$/, '');
   const params = getAuthParams(creds);
   const url = `${baseUrl}/rest/stream?id=${id}&${params}`;
-  // console.log(`[Subsonic] Generated Stream URL: ${url}`);
   return url;
 };
 
-export const getRandomSongs = async (creds: SubsonicCredentials): Promise<Song[]> => {
+export const getRandomSongs = async (creds: SubsonicCredentials, size: number = 20): Promise<Song[]> => {
   try {
     const baseUrl = creds.url.replace(/\/$/, '');
     const params = getAuthParams(creds);
-    const url = `${baseUrl}/rest/getRandomSongs?size=20&${params}`;
+    const url = `${baseUrl}/rest/getRandomSongs?size=${size}&${params}`;
     
     const data = await fetchWithLogging(url, 'getRandomSongs');
     
@@ -93,13 +90,14 @@ export const getRandomSongs = async (creds: SubsonicCredentials): Promise<Song[]
   }
 };
 
-export const getRecentAlbums = async (creds: SubsonicCredentials): Promise<Album[]> => {
+export const getRecentAlbums = async (creds: SubsonicCredentials, size: number = 50, type: 'newest' | 'recent' = 'newest'): Promise<Album[]> => {
   try {
     const baseUrl = creds.url.replace(/\/$/, '');
     const params = getAuthParams(creds);
-    const url = `${baseUrl}/rest/getAlbumList2?type=newest&size=10&${params}`;
+    // type: newest = Recently Added, recent = Recently Played
+    const url = `${baseUrl}/rest/getAlbumList2?type=${type}&size=${size}&${params}`;
 
-    const data = await fetchWithLogging(url, 'getRecentAlbums');
+    const data = await fetchWithLogging(url, `getRecentAlbums-${type}`);
 
     const albums = data['subsonic-response']?.albumList2?.album || [];
 
@@ -120,6 +118,7 @@ export const getPlaylists = async (creds: SubsonicCredentials): Promise<Playlist
   try {
     const baseUrl = creds.url.replace(/\/$/, '');
     const params = getAuthParams(creds);
+    // Fetching all playlists (default limit usually allows this, explicitly setting null implies server default, but better to set large)
     const url = `${baseUrl}/rest/getPlaylists?${params}`;
 
     const data = await fetchWithLogging(url, 'getPlaylists');
@@ -130,7 +129,7 @@ export const getPlaylists = async (creds: SubsonicCredentials): Promise<Playlist
       id: p.id,
       name: p.name,
       songCount: p.songCount,
-      coverArt: p.coverArt ? getCoverArtUrl(creds, p.coverArt) : 'https://picsum.photos/300/300?random=playlist',
+      coverArt: p.coverArt ? getCoverArtUrl(creds, p.coverArt) : 'https://via.placeholder.com/300?text=Playlist',
     }));
   } catch (error) {
     console.error("[Subsonic] getPlaylists failed:", error);
@@ -199,7 +198,7 @@ export const getPlaylistDetails = async (creds: SubsonicCredentials, playlistId:
             id: playlistData.id,
             name: playlistData.name,
             songCount: playlistData.songCount,
-            coverArt: playlistData.coverArt ? getCoverArtUrl(creds, playlistData.coverArt) : 'https://picsum.photos/300/300?random=playlist',
+            coverArt: playlistData.coverArt ? getCoverArtUrl(creds, playlistData.coverArt) : 'https://via.placeholder.com/300?text=Playlist',
             songs: songs
         };
 
@@ -208,16 +207,3 @@ export const getPlaylistDetails = async (creds: SubsonicCredentials, playlistId:
         return null;
     }
 }
-
-// Mock fallback
-export const getMockSongs = (): Song[] => [
-  { id: '1', title: 'Debug Song 1', artist: 'Mock Artist', album: 'Debug Album', duration: 243, coverArt: 'https://picsum.photos/300/300?random=1' },
-];
-
-export const getMockAlbums = (): Album[] => [
-    { id: 'a1', title: 'Debug Album', artist: 'Mock Artist', year: 2024, coverArt: 'https://picsum.photos/300/300?random=6' },
-];
-
-export const getMockPlaylists = (): Playlist[] => [
-    { id: 'p1', name: 'Debug Playlist', songCount: 10, coverArt: 'https://picsum.photos/300/300?random=10' },
-];

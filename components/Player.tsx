@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Pause, SkipForward, SkipBack, ChevronDown, Shuffle, Repeat } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, ChevronDown, Shuffle, Repeat, Cast } from 'lucide-react';
 import { Song, SubsonicCredentials } from '../types';
 import { getStreamUrl } from '../services/subsonicService';
 
@@ -36,13 +36,8 @@ const Player: React.FC<PlayerProps> = ({
     if (currentSong && audioRef.current) {
       const url = getStreamUrl(credentials, currentSong.id);
       if (audioRef.current.src !== url) {
-        // New song loaded
         audioRef.current.src = url;
         audioRef.current.play()
-          .then(() => {
-             // If the parent component says it shouldn't be playing (rare race condition), pause.
-             // However, usually loading a new song implies auto-play.
-          })
           .catch(e => console.error("Autoplay blocked", e));
       }
     }
@@ -86,13 +81,22 @@ const Player: React.FC<PlayerProps> = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  // --- CHROMECAST ---
+  const handleCast = () => {
+    if (window.cast && window.cast.framework) {
+      window.cast.framework.CastContext.getInstance().requestSession();
+    } else {
+      alert("Chromecast not available. Ensure you are using Chrome or a supported browser on a secure connection.");
+    }
+  };
+
   // --- UI RENDERING ---
 
   return (
     <>
-      {/* 1. Full Screen Player UI */}
+      {/* 1. Full Screen Player UI - Z-Index increased to 60 to cover bottom nav (z-50) */}
       {currentSong && isExpanded && (
-        <div className="fixed inset-0 z-50 bg-subsonic-bg flex flex-col animate-in slide-in-from-bottom duration-300">
+        <div className="fixed inset-0 z-[60] bg-subsonic-bg flex flex-col animate-in slide-in-from-bottom duration-300">
             {/* Background Blur */}
             <div 
               className="absolute inset-0 z-0 opacity-30 blur-3xl scale-125 transition-all duration-1000" 
@@ -106,7 +110,10 @@ const Player: React.FC<PlayerProps> = ({
                 <ChevronDown size={32} />
               </button>
               <span className="text-xs font-bold tracking-widest uppercase text-white/80">Now Playing</span>
-              <div className="w-8" /> {/* Spacer */}
+              {/* Cast Button */}
+              <button onClick={handleCast} className="text-white hover:text-subsonic-primary p-2">
+                 <Cast size={24} />
+              </button>
             </div>
 
             {/* Album Art */}
@@ -177,7 +184,7 @@ const Player: React.FC<PlayerProps> = ({
         </div>
       )}
 
-      {/* 2. Mini Player UI */}
+      {/* 2. Mini Player UI - Always visible when not expanded, z-index just below full screen */}
       {currentSong && !isExpanded && (
         <div 
           onClick={onExpand}
@@ -199,6 +206,7 @@ const Player: React.FC<PlayerProps> = ({
               </div>
             </div>
 
+            {/* Mini Player Controls - Explicitly added Play/Pause here */}
             <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
               <button onClick={onPrev} className="text-white hover:text-subsonic-primary transition-colors hidden sm:block">
                 <SkipBack size={20} fill="currentColor" />
@@ -228,7 +236,7 @@ const Player: React.FC<PlayerProps> = ({
         </div>
       )}
 
-      {/* 3. Persistent Audio Element - Always rendered if song exists */}
+      {/* 3. Persistent Audio Element */}
       {currentSong && (
           <audio 
           ref={audioRef} 
