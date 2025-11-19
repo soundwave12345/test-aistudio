@@ -4,6 +4,7 @@ import Header from './components/Header';
 import SettingsModal from './components/SettingsModal';
 import MediaCard from './components/MediaCard';
 import Player from './components/Player';
+import SongList from './components/SongList';
 import { SubsonicCredentials, ViewState, Song, Album, Playlist } from './types';
 import { 
   getRecentAlbums, 
@@ -11,7 +12,9 @@ import {
   getRandomSongs,
   getMockSongs,
   getMockAlbums,
-  getMockPlaylists
+  getMockPlaylists,
+  getAlbumDetails,
+  getPlaylistDetails
 } from './services/subsonicService';
 
 const App: React.FC = () => {
@@ -19,7 +22,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ViewState>(ViewState.HOME);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
-  // Init creds from local storage
+  // Init creds
   const [isDemoMode, setIsDemoMode] = useState(() => {
     return localStorage.getItem('subsonic_demo') !== 'false';
   });
@@ -39,24 +42,22 @@ const App: React.FC = () => {
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
 
   // Data State
-  const [songs, setSongs] = useState<Song[]>([]);
+  const [songs, setSongs] = useState<Song[]>([]); // Songs list for playback context
   const [albums, setAlbums] = useState<Album[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+
+  // Drill Down State
+  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
 
   // --- Effects ---
   useEffect(() => {
     const fetchData = async () => {
-      console.log("--- App Data Fetch Triggered ---");
-      console.log("Mode:", isDemoMode ? "DEMO" : "REAL");
-      
       if (isDemoMode) {
         setSongs(getMockSongs());
         setAlbums(getMockAlbums());
         setPlaylists(getMockPlaylists());
       } else {
-        console.log("Target URL:", credentials.url);
-        console.log("User:", credentials.username);
-        
         try {
           const [fetchedSongs, fetchedAlbums, fetchedPlaylists] = await Promise.all([
             getRandomSongs(credentials),
@@ -71,23 +72,63 @@ const App: React.FC = () => {
         }
       }
     };
-
     fetchData();
   }, [isDemoMode, credentials]);
 
-  // --- Handlers ---
+  // --- Navigation Handlers ---
+  const handleTabChange = (tab: ViewState) => {
+    setActiveTab(tab);
+    // Reset drill down selection when changing main tabs
+    setSelectedAlbum(null);
+    setSelectedPlaylist(null);
+  };
+
+  const handleBack = () => {
+    if (activeTab === ViewState.ALBUM_DETAILS) {
+      setSelectedAlbum(null);
+      setActiveTab(ViewState.ALBUMS);
+    } else if (activeTab === ViewState.PLAYLIST_DETAILS) {
+      setSelectedPlaylist(null);
+      setActiveTab(ViewState.PLAYLISTS);
+    }
+  };
+
+  // --- Selection Handlers ---
+  const handleAlbumClick = async (album: Album) => {
+      if (isDemoMode) {
+          setSelectedAlbum({ ...album, songs: getMockSongs() });
+      } else {
+          const detailedAlbum = await getAlbumDetails(credentials, album.id);
+          if (detailedAlbum) setSelectedAlbum(detailedAlbum);
+      }
+      setActiveTab(ViewState.ALBUM_DETAILS);
+  };
+
+  const handlePlaylistClick = async (playlist: Playlist) => {
+      if (isDemoMode) {
+          setSelectedPlaylist({ ...playlist, songs: getMockSongs() });
+      } else {
+          const detailedPlaylist = await getPlaylistDetails(credentials, playlist.id);
+          if (detailedPlaylist) setSelectedPlaylist(detailedPlaylist);
+      }
+      setActiveTab(ViewState.PLAYLIST_DETAILS);
+  };
+
+  // --- Player Handlers ---
   const handleSettingsSave = (creds: SubsonicCredentials, isDemo: boolean) => {
-    console.log("Saving settings:", { url: creds.url, user: creds.username, isDemo });
     setCredentials(creds);
     setIsDemoMode(isDemo);
     localStorage.setItem('subsonic_creds', JSON.stringify(creds));
     localStorage.setItem('subsonic_demo', String(isDemo));
   };
 
-  const handlePlaySong = (song: Song) => {
+  const handlePlaySong = (song: Song, contextSongs?: Song[]) => {
+    // If playing from a specific context (album/playlist), update the main songs list
+    if (contextSongs && contextSongs.length > 0) {
+        setSongs(contextSongs);
+    }
     setCurrentSong(song);
     setIsPlaying(true);
-    // Automatically expand player if desired, or keep mini
     setIsPlayerExpanded(true);
   };
 
@@ -129,7 +170,7 @@ const App: React.FC = () => {
             <section className="space-y-3">
                <div className="flex items-center justify-between px-4">
                 <h2 className="text-lg font-bold text-white">Mix</h2>
-                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => setActiveTab(ViewState.SONGS)}>See All</button>
+                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => handleTabChange(ViewState.SONGS)}>See All</button>
               </div>
               <div className="flex overflow-x-auto px-4 gap-4 pb-4 hide-scrollbar snap-x snap-mandatory">
                 {songs.map((song) => (
@@ -150,7 +191,7 @@ const App: React.FC = () => {
             <section className="space-y-3">
               <div className="flex items-center justify-between px-4">
                 <h2 className="text-lg font-bold text-white">Recent Albums</h2>
-                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => setActiveTab(ViewState.ALBUMS)}>See All</button>
+                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => handleTabChange(ViewState.ALBUMS)}>See All</button>
               </div>
               <div className="flex overflow-x-auto px-4 gap-4 pb-4 hide-scrollbar snap-x snap-mandatory">
                 {albums.map((album) => (
@@ -160,6 +201,7 @@ const App: React.FC = () => {
                       title={album.title} 
                       subtitle={album.artist} 
                       size="large"
+                      onClick={() => handleAlbumClick(album)}
                     />
                   </div>
                 ))}
@@ -170,7 +212,7 @@ const App: React.FC = () => {
              <section className="space-y-3">
               <div className="flex items-center justify-between px-4">
                 <h2 className="text-lg font-bold text-white">Playlists</h2>
-                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => setActiveTab(ViewState.PLAYLISTS)}>See All</button>
+                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => handleTabChange(ViewState.PLAYLISTS)}>See All</button>
               </div>
               <div className="flex overflow-x-auto px-4 gap-4 pb-4 hide-scrollbar snap-x snap-mandatory">
                 {playlists.map((playlist) => (
@@ -180,6 +222,7 @@ const App: React.FC = () => {
                       title={playlist.name} 
                       subtitle={`${playlist.songCount} songs`} 
                       size="small"
+                      onClick={() => handlePlaylistClick(playlist)}
                     />
                   </div>
                 ))}
@@ -199,6 +242,7 @@ const App: React.FC = () => {
                   title={playlist.name} 
                   subtitle={`${playlist.songCount} songs`} 
                   size="medium"
+                  onClick={() => handlePlaylistClick(playlist)}
                 />
              ))}
           </div>
@@ -215,6 +259,7 @@ const App: React.FC = () => {
                   title={album.title} 
                   subtitle={album.artist} 
                   size="medium"
+                  onClick={() => handleAlbumClick(album)}
                 />
              ))}
           </div>
@@ -236,11 +281,49 @@ const App: React.FC = () => {
              ))}
           </div>
         );
+      
+      case ViewState.ALBUM_DETAILS:
+          if (!selectedAlbum) return null;
+          return (
+              <SongList 
+                  title={selectedAlbum.title}
+                  subtitle={selectedAlbum.artist}
+                  coverArt={selectedAlbum.coverArt}
+                  songs={selectedAlbum.songs || []}
+                  onPlaySong={(song) => handlePlaySong(song, selectedAlbum.songs)}
+              />
+          );
+
+      case ViewState.PLAYLIST_DETAILS:
+          if (!selectedPlaylist) return null;
+          return (
+              <SongList 
+                  title={selectedPlaylist.name}
+                  subtitle={`${selectedPlaylist.songCount} songs`}
+                  coverArt={selectedPlaylist.coverArt}
+                  songs={selectedPlaylist.songs || []}
+                  onPlaySong={(song) => handlePlaySong(song, selectedPlaylist.songs)}
+              />
+          );
 
       default:
         return null;
     }
   };
+
+  const getTitle = () => {
+      switch(activeTab) {
+          case ViewState.HOME: return 'Home';
+          case ViewState.PLAYLISTS: return 'Playlists';
+          case ViewState.ALBUMS: return 'Albums';
+          case ViewState.SONGS: return 'Songs';
+          case ViewState.ALBUM_DETAILS: return 'Album';
+          case ViewState.PLAYLIST_DETAILS: return 'Playlist';
+          default: return '';
+      }
+  }
+
+  const isDetailView = activeTab === ViewState.ALBUM_DETAILS || activeTab === ViewState.PLAYLIST_DETAILS;
 
   return (
     <div className="flex h-screen bg-subsonic-bg text-subsonic-text font-sans overflow-hidden selection:bg-subsonic-primary selection:text-white">
@@ -248,19 +331,20 @@ const App: React.FC = () => {
       {/* Desktop Sidebar */}
       <DesktopSidebar 
         activeTab={activeTab} 
-        onChange={setActiveTab} 
+        onChange={handleTabChange} 
         onSettingsClick={() => setIsSettingsOpen(true)}
       />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full relative overflow-hidden">
         <Header 
-          title={activeTab.charAt(0).toUpperCase() + activeTab.slice(1).toLowerCase()} 
+          title={getTitle()}
           onMenuClick={() => setIsSettingsOpen(true)} 
+          onBack={isDetailView ? handleBack : undefined}
         />
         
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-screen-xl mx-auto pt-2 md:pt-6">
+        <main className="flex-1 overflow-y-auto" id="main-scroll">
+          <div className="max-w-screen-xl mx-auto pt-0 md:pt-6">
             {renderContent()}
           </div>
         </main>
@@ -279,10 +363,10 @@ const App: React.FC = () => {
         />
       </div>
 
-      {/* Mobile Bottom Nav */}
+      {/* Mobile Bottom Nav - Hidden in Detail View to make space or visual preference? Usually kept. Keeping for now. */}
       <MobileBottomNav 
         activeTab={activeTab} 
-        onChange={setActiveTab} 
+        onChange={handleTabChange} 
         onSettingsClick={() => setIsSettingsOpen(true)}
       />
 

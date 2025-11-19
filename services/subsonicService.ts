@@ -20,9 +20,7 @@ const fetchWithLogging = async (url: string, endpoint: string) => {
     }
 
     try {
-      // Subsonic sometimes returns JSON in a weird format, checking valid JSON
       const data = JSON.parse(text);
-      // console.log(`[Subsonic] [${endpoint}] Parsed Data keys:`, Object.keys(data));
       return data;
     } catch (e) {
       console.error(`[Subsonic] [${endpoint}] Failed to parse JSON. Response was:`, text);
@@ -43,9 +41,6 @@ const fetchWithLogging = async (url: string, endpoint: string) => {
   }
 };
 
-/**
- * Helper to build the query parameters for Subsonic Auth
- */
 const getAuthParams = (creds: SubsonicCredentials) => {
   const params = new URLSearchParams();
   params.append('u', creds.username);
@@ -70,7 +65,7 @@ export const getStreamUrl = (creds: SubsonicCredentials, id: string): string => 
   const baseUrl = creds.url.replace(/\/$/, '');
   const params = getAuthParams(creds);
   const url = `${baseUrl}/rest/stream?id=${id}&${params}`;
-  console.log(`[Subsonic] Generated Stream URL: ${url}`);
+  // console.log(`[Subsonic] Generated Stream URL: ${url}`);
   return url;
 };
 
@@ -83,7 +78,6 @@ export const getRandomSongs = async (creds: SubsonicCredentials): Promise<Song[]
     const data = await fetchWithLogging(url, 'getRandomSongs');
     
     const songs = data['subsonic-response']?.randomSongs?.song || [];
-    console.log(`[Subsonic] Found ${songs.length} random songs`);
     
     return songs.map((s: any) => ({
       id: s.id,
@@ -108,7 +102,6 @@ export const getRecentAlbums = async (creds: SubsonicCredentials): Promise<Album
     const data = await fetchWithLogging(url, 'getRecentAlbums');
 
     const albums = data['subsonic-response']?.albumList2?.album || [];
-    console.log(`[Subsonic] Found ${albums.length} recent albums`);
 
     return albums.map((a: any) => ({
       id: a.id,
@@ -132,7 +125,6 @@ export const getPlaylists = async (creds: SubsonicCredentials): Promise<Playlist
     const data = await fetchWithLogging(url, 'getPlaylists');
 
     const playlists = data['subsonic-response']?.playlists?.playlist || [];
-    console.log(`[Subsonic] Found ${playlists.length} playlists`);
 
     return playlists.map((p: any) => ({
       id: p.id,
@@ -146,19 +138,76 @@ export const getPlaylists = async (creds: SubsonicCredentials): Promise<Playlist
   }
 };
 
-export const pingServer = async (creds: SubsonicCredentials): Promise<boolean> => {
-  try {
-    const baseUrl = creds.url.replace(/\/$/, '');
-    const params = getAuthParams(creds);
-    const url = `${baseUrl}/rest/ping?${params}`;
+export const getAlbumDetails = async (creds: SubsonicCredentials, albumId: string): Promise<Album | null> => {
+    try {
+        const baseUrl = creds.url.replace(/\/$/, '');
+        const params = getAuthParams(creds);
+        const url = `${baseUrl}/rest/getAlbum?id=${albumId}&${params}`;
     
-    const data = await fetchWithLogging(url, 'ping');
-    return data['subsonic-response']?.status === 'ok';
-  } catch (error) {
-    console.error("[Subsonic] Ping failed:", error);
-    return false;
-  }
-};
+        const data = await fetchWithLogging(url, 'getAlbumDetails');
+        const albumData = data['subsonic-response']?.album;
+
+        if (!albumData) return null;
+
+        const songs = (albumData.song || []).map((s: any) => ({
+            id: s.id,
+            title: s.title,
+            artist: s.artist,
+            album: albumData.title || albumData.name,
+            coverArt: getCoverArtUrl(creds, s.coverArt || s.id),
+            duration: s.duration,
+            track: s.track
+        }));
+
+        return {
+            id: albumData.id,
+            title: albumData.title || albumData.name,
+            artist: albumData.artist,
+            coverArt: getCoverArtUrl(creds, albumData.coverArt || albumData.id),
+            year: albumData.year,
+            songCount: albumData.songCount,
+            songs: songs
+        };
+
+    } catch (error) {
+        console.error("[Subsonic] getAlbumDetails failed:", error);
+        return null;
+    }
+}
+
+export const getPlaylistDetails = async (creds: SubsonicCredentials, playlistId: string): Promise<Playlist | null> => {
+    try {
+        const baseUrl = creds.url.replace(/\/$/, '');
+        const params = getAuthParams(creds);
+        const url = `${baseUrl}/rest/getPlaylist?id=${playlistId}&${params}`;
+    
+        const data = await fetchWithLogging(url, 'getPlaylistDetails');
+        const playlistData = data['subsonic-response']?.playlist;
+
+        if (!playlistData) return null;
+
+        const songs = (playlistData.entry || []).map((s: any) => ({
+            id: s.id,
+            title: s.title,
+            artist: s.artist,
+            album: s.album,
+            coverArt: getCoverArtUrl(creds, s.coverArt || s.id),
+            duration: s.duration,
+        }));
+
+        return {
+            id: playlistData.id,
+            name: playlistData.name,
+            songCount: playlistData.songCount,
+            coverArt: playlistData.coverArt ? getCoverArtUrl(creds, playlistData.coverArt) : 'https://picsum.photos/300/300?random=playlist',
+            songs: songs
+        };
+
+    } catch (error) {
+        console.error("[Subsonic] getPlaylistDetails failed:", error);
+        return null;
+    }
+}
 
 // Mock fallback
 export const getMockSongs = (): Song[] => [

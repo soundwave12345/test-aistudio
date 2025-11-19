@@ -11,6 +11,7 @@ export interface Song {
   album: string;
   coverArt: string;
   duration: number; // seconds
+  track?: number;
   streamUrl?: string; // Optional, generated on demand
 }
 
@@ -20,6 +21,8 @@ export interface Album {
   artist: string;
   coverArt: string;
   year?: number;
+  songCount?: number;
+  songs?: Song[]; // For details view
 }
 
 export interface Playlist {
@@ -27,13 +30,16 @@ export interface Playlist {
   name: string;
   songCount: number;
   coverArt: string;
+  songs?: Song[]; // For details view
 }
 
 export enum ViewState {
   HOME = 'HOME',
   PLAYLISTS = 'PLAYLISTS',
   ALBUMS = 'ALBUMS',
-  SONGS = 'SONGS'
+  SONGS = 'SONGS',
+  ALBUM_DETAILS = 'ALBUM_DETAILS',
+  PLAYLIST_DETAILS = 'PLAYLIST_DETAILS'
 }
 
 export type SubsonicContextType = {
