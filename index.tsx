@@ -5,7 +5,14 @@ import './index.css';
 import VConsole from 'vconsole';
 
 // Initialize vConsole for on-device debugging
-const vConsole = new VConsole();
+// We exclude the 'network' plugin because it tries to overwrite window.fetch,
+// which causes a crash on some Capacitor WebViews where fetch is read-only.
+// Our manual logging in subsonicService.ts will still appear in the 'Log' tab.
+try {
+  const vConsole = new VConsole({ defaultPlugins: ['system', 'element', 'storage'] });
+} catch (e) {
+  console.warn("Failed to initialize vConsole:", e);
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
