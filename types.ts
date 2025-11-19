@@ -1,7 +1,7 @@
 export interface SubsonicCredentials {
   url: string;
   username: string;
-  password?: string; // In a real app, use token/salt
+  password?: string; 
 }
 
 export interface Song {
@@ -11,6 +11,7 @@ export interface Song {
   album: string;
   coverArt: string;
   duration: number; // seconds
+  streamUrl?: string; // Optional, generated on demand
 }
 
 export interface Album {

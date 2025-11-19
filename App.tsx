@@ -5,45 +5,69 @@ import SettingsModal from './components/SettingsModal';
 import MediaCard from './components/MediaCard';
 import Player from './components/Player';
 import { SubsonicCredentials, ViewState, Song, Album, Playlist } from './types';
-import { getRecentSongs, getRecentAlbums, getRecentPlaylists, getAllSongs } from './services/subsonicService';
+import { 
+  getRecentAlbums, 
+  getPlaylists, 
+  getRandomSongs,
+  getMockSongs,
+  getMockAlbums,
+  getMockPlaylists
+} from './services/subsonicService';
 
 const App: React.FC = () => {
   // --- State ---
   const [activeTab, setActiveTab] = useState<ViewState>(ViewState.HOME);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(true);
-  const [credentials, setCredentials] = useState<SubsonicCredentials>({
-    url: 'https://music.demo.com',
-    username: 'guest',
-    password: '',
+  
+  // Init creds from local storage
+  const [isDemoMode, setIsDemoMode] = useState(() => {
+    return localStorage.getItem('subsonic_demo') !== 'false';
+  });
+  
+  const [credentials, setCredentials] = useState<SubsonicCredentials>(() => {
+    const saved = localStorage.getItem('subsonic_creds');
+    return saved ? JSON.parse(saved) : {
+      url: 'https://music.demo.com',
+      username: 'guest',
+      password: '',
+    };
   });
 
   // Player State
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
 
   // Data State
-  const [recentSongs, setRecentSongs] = useState<Song[]>([]);
-  const [recentAlbums, setRecentAlbums] = useState<Album[]>([]);
-  const [recentPlaylists, setRecentPlaylists] = useState<Playlist[]>([]);
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
 
   // --- Effects ---
   useEffect(() => {
-    // Initial Data Load
-    if (isDemoMode) {
-      setRecentSongs(getRecentSongs());
-      setRecentAlbums(getRecentAlbums());
-      setRecentPlaylists(getRecentPlaylists());
-      // Set initial song for player display
-      const songs = getRecentSongs();
-      if (songs.length > 0) setCurrentSong(songs[0]);
-    } else {
-      console.log("Fetching from real server: ", credentials.url);
-      // Keeping demo data for visual check even in 'real' mode for this output
-      setRecentSongs(getRecentSongs());
-      setRecentAlbums(getRecentAlbums());
-      setRecentPlaylists(getRecentPlaylists());
-    }
+    const fetchData = async () => {
+      if (isDemoMode) {
+        setSongs(getMockSongs());
+        setAlbums(getMockAlbums());
+        setPlaylists(getMockPlaylists());
+      } else {
+        console.log("Fetching from real server: ", credentials.url);
+        try {
+          const [fetchedSongs, fetchedAlbums, fetchedPlaylists] = await Promise.all([
+            getRandomSongs(credentials),
+            getRecentAlbums(credentials),
+            getPlaylists(credentials)
+          ]);
+          setSongs(fetchedSongs);
+          setAlbums(fetchedAlbums);
+          setPlaylists(fetchedPlaylists);
+        } catch (e) {
+          console.error("Failed to fetch data", e);
+        }
+      }
+    };
+
+    fetchData();
   }, [isDemoMode, credentials]);
 
   // --- Handlers ---
@@ -57,6 +81,8 @@ const App: React.FC = () => {
   const handlePlaySong = (song: Song) => {
     setCurrentSong(song);
     setIsPlaying(true);
+    // Automatically expand player if desired, or keep mini
+    setIsPlayerExpanded(true);
   };
 
   const togglePlayPause = () => {
@@ -65,19 +91,25 @@ const App: React.FC = () => {
 
   const handleNext = () => {
     if (!currentSong) return;
-    const all = getAllSongs();
-    const idx = all.findIndex(s => s.id === currentSong.id);
-    const nextIdx = (idx + 1) % all.length;
-    setCurrentSong(all[nextIdx]);
+    const idx = songs.findIndex(s => s.id === currentSong.id);
+    if (idx === -1 && songs.length > 0) {
+        setCurrentSong(songs[0]);
+        return;
+    }
+    const nextIdx = (idx + 1) % songs.length;
+    setCurrentSong(songs[nextIdx]);
     setIsPlaying(true);
   };
 
   const handlePrev = () => {
      if (!currentSong) return;
-    const all = getAllSongs();
-    const idx = all.findIndex(s => s.id === currentSong.id);
-    const prevIdx = (idx - 1 + all.length) % all.length;
-    setCurrentSong(all[prevIdx]);
+    const idx = songs.findIndex(s => s.id === currentSong.id);
+    if (idx === -1 && songs.length > 0) {
+        setCurrentSong(songs[0]);
+        return;
+    }
+    const prevIdx = (idx - 1 + songs.length) % songs.length;
+    setCurrentSong(songs[prevIdx]);
     setIsPlaying(true);
   };
 
@@ -87,14 +119,14 @@ const App: React.FC = () => {
       case ViewState.HOME:
         return (
           <div className="space-y-8 pb-32 animate-in fade-in duration-500">
-            {/* Recent Songs Section */}
+            {/* Songs Section */}
             <section className="space-y-3">
                <div className="flex items-center justify-between px-4">
-                <h2 className="text-lg font-bold text-white">Recently Played Songs</h2>
-                <button className="text-xs text-subsonic-primary font-semibold">See All</button>
+                <h2 className="text-lg font-bold text-white">Mix</h2>
+                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => setActiveTab(ViewState.SONGS)}>See All</button>
               </div>
               <div className="flex overflow-x-auto px-4 gap-4 pb-4 hide-scrollbar snap-x snap-mandatory">
-                {recentSongs.map((song) => (
+                {songs.map((song) => (
                   <div key={song.id} className="snap-start">
                     <MediaCard 
                       image={song.coverArt} 
@@ -108,14 +140,14 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Recent Albums Section */}
+            {/* Albums Section */}
             <section className="space-y-3">
               <div className="flex items-center justify-between px-4">
                 <h2 className="text-lg font-bold text-white">Recent Albums</h2>
-                <button className="text-xs text-subsonic-primary font-semibold">See All</button>
+                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => setActiveTab(ViewState.ALBUMS)}>See All</button>
               </div>
               <div className="flex overflow-x-auto px-4 gap-4 pb-4 hide-scrollbar snap-x snap-mandatory">
-                {recentAlbums.map((album) => (
+                {albums.map((album) => (
                   <div key={album.id} className="snap-start">
                      <MediaCard 
                       image={album.coverArt} 
@@ -128,14 +160,14 @@ const App: React.FC = () => {
               </div>
             </section>
 
-             {/* Recent Playlists Section */}
+             {/* Playlists Section */}
              <section className="space-y-3">
               <div className="flex items-center justify-between px-4">
-                <h2 className="text-lg font-bold text-white">Recent Playlists</h2>
-                <button className="text-xs text-subsonic-primary font-semibold">See All</button>
+                <h2 className="text-lg font-bold text-white">Playlists</h2>
+                <button className="text-xs text-subsonic-primary font-semibold" onClick={() => setActiveTab(ViewState.PLAYLISTS)}>See All</button>
               </div>
               <div className="flex overflow-x-auto px-4 gap-4 pb-4 hide-scrollbar snap-x snap-mandatory">
-                {recentPlaylists.map((playlist) => (
+                {playlists.map((playlist) => (
                   <div key={playlist.id} className="snap-start">
                      <MediaCard 
                       image={playlist.coverArt} 
@@ -153,7 +185,8 @@ const App: React.FC = () => {
       case ViewState.PLAYLISTS:
         return (
           <div className="p-4 pb-32 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-             {recentPlaylists.concat(recentPlaylists).map((playlist, i) => (
+             {playlists.length === 0 ? <div className="text-gray-500 col-span-full text-center">No playlists found</div> : 
+               playlists.map((playlist, i) => (
                 <MediaCard 
                   key={`${playlist.id}-${i}`}
                   image={playlist.coverArt} 
@@ -168,7 +201,8 @@ const App: React.FC = () => {
       case ViewState.ALBUMS:
         return (
           <div className="p-4 pb-32 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-             {recentAlbums.concat(recentAlbums).map((album, i) => (
+             {albums.length === 0 ? <div className="text-gray-500 col-span-full text-center">No albums found</div> :
+               albums.map((album, i) => (
                 <MediaCard 
                   key={`${album.id}-${i}`}
                   image={album.coverArt} 
@@ -183,7 +217,8 @@ const App: React.FC = () => {
       case ViewState.SONGS:
         return (
           <div className="p-4 pb-32 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-             {getAllSongs().map((song) => (
+             {songs.length === 0 ? <div className="text-gray-500 col-span-full text-center">No songs found</div> :
+               songs.map((song) => (
                 <MediaCard 
                   key={song.id}
                   image={song.coverArt} 
@@ -224,15 +259,17 @@ const App: React.FC = () => {
           </div>
         </main>
 
-        {/* Player sits inside the flex column on mobile visually (fixed in component), 
-            but we render it here to be part of the DOM tree. 
-            The component itself handles fixed positioning. */}
+        {/* Player handles its own fixed positioning and full screen mode */}
         <Player 
           currentSong={currentSong} 
           isPlaying={isPlaying}
           onPlayPause={togglePlayPause}
           onNext={handleNext}
           onPrev={handlePrev}
+          credentials={credentials}
+          isExpanded={isPlayerExpanded}
+          onExpand={() => setIsPlayerExpanded(true)}
+          onCollapse={() => setIsPlayerExpanded(false)}
         />
       </div>
 
