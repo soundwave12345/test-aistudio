@@ -46,12 +46,17 @@ const App: React.FC = () => {
   // --- Effects ---
   useEffect(() => {
     const fetchData = async () => {
+      console.log("--- App Data Fetch Triggered ---");
+      console.log("Mode:", isDemoMode ? "DEMO" : "REAL");
+      
       if (isDemoMode) {
         setSongs(getMockSongs());
         setAlbums(getMockAlbums());
         setPlaylists(getMockPlaylists());
       } else {
-        console.log("Fetching from real server: ", credentials.url);
+        console.log("Target URL:", credentials.url);
+        console.log("User:", credentials.username);
+        
         try {
           const [fetchedSongs, fetchedAlbums, fetchedPlaylists] = await Promise.all([
             getRandomSongs(credentials),
@@ -62,7 +67,7 @@ const App: React.FC = () => {
           setAlbums(fetchedAlbums);
           setPlaylists(fetchedPlaylists);
         } catch (e) {
-          console.error("Failed to fetch data", e);
+          console.error("Failed to fetch data in App.tsx", e);
         }
       }
     };
@@ -72,6 +77,7 @@ const App: React.FC = () => {
 
   // --- Handlers ---
   const handleSettingsSave = (creds: SubsonicCredentials, isDemo: boolean) => {
+    console.log("Saving settings:", { url: creds.url, user: creds.username, isDemo });
     setCredentials(creds);
     setIsDemoMode(isDemo);
     localStorage.setItem('subsonic_creds', JSON.stringify(creds));
