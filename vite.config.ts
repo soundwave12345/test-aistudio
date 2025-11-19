@@ -6,5 +6,14 @@ export default defineConfig({
   root: '.',
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      // vconsole is loaded via importmap in index.html, so we exclude it from the bundle
+      external: ['vconsole'],
+      output: {
+        globals: {
+          vconsole: 'VConsole'
+        }
+      }
+    }
   }
 });
